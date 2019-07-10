@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">2359 Media VN Testing</string>
+
+
+    <string name="network_error">No network connection.</string>
+    <string name="errorString">Something went wrong, Please try again.</string>
+</resources>
