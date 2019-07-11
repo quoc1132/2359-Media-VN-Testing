@@ -7,6 +7,7 @@ import io.reactivex.android.schedulers.AndroidSchedulers;
 import io.reactivex.disposables.CompositeDisposable;
 import io.reactivex.schedulers.Schedulers;
 import uit.quocnguyen.a2359mediavntesting.commons.ApiResponse;
+import uit.quocnguyen.a2359mediavntesting.commons.Constant;
 
 public class NowPlayingViewModel extends ViewModel {
     private NowPlayingRepository nowPlayingRepository;
@@ -23,8 +24,8 @@ public class NowPlayingViewModel extends ViewModel {
     }
 
 
-    public void getNowPlayingApi(String apiKey, int page) {
-        disposables.add(nowPlayingRepository.executeGetNowPlaying(apiKey, page)
+    public void getNowPlayingApi(int page) {
+        disposables.add(nowPlayingRepository.executeGetNowPlaying(Constant.apiKey, page)
                 .subscribeOn(Schedulers.io())
                 .observeOn(AndroidSchedulers.mainThread())
                 .doOnSubscribe((d) -> responseLiveData.setValue(ApiResponse.loading()))

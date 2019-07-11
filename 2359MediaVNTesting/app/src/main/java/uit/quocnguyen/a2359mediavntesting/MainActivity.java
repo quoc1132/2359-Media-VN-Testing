@@ -2,25 +2,35 @@ package uit.quocnguyen.a2359mediavntesting;
 
 import android.app.ProgressDialog;
 import android.arch.lifecycle.ViewModelProviders;
+import android.content.res.Resources;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
+import android.support.v7.widget.DefaultItemAnimator;
+import android.support.v7.widget.GridLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.util.Log;
-import android.widget.EditText;
+import android.util.TypedValue;
+import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.Toast;
 
-import com.google.gson.JsonElement;
+import java.util.ArrayList;
+import java.util.List;
 
 import javax.inject.Inject;
 
+import uit.quocnguyen.a2359mediavntesting.adapters.NowPlayingAdapter;
 import uit.quocnguyen.a2359mediavntesting.commons.ApiResponse;
-import uit.quocnguyen.a2359mediavntesting.commons.Utils;
-import uit.quocnguyen.a2359mediavntesting.now_playing.NowPlayingRepository;
+import uit.quocnguyen.a2359mediavntesting.commons.Constant;
+import uit.quocnguyen.a2359mediavntesting.listeners.PaginationScrollListener;
+import uit.quocnguyen.a2359mediavntesting.utils.Utils;
+import uit.quocnguyen.a2359mediavntesting.models.NowPlayingItem;
+import uit.quocnguyen.a2359mediavntesting.models.NowPlayingResponses;
 import uit.quocnguyen.a2359mediavntesting.now_playing.NowPlayingViewModel;
 import uit.quocnguyen.a2359mediavntesting.now_playing.NowPlayingViewModelFactory;
+import uit.quocnguyen.a2359mediavntesting.utils.GridSpacingItemDecoration;
 
-import static uit.quocnguyen.a2359mediavntesting.commons.Status.*;
-
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends AppCompatActivity implements NowPlayingAdapter.NowPlayingAdapterListener {
 
     @Inject
     NowPlayingViewModelFactory nowPlayingViewModelFactory;
@@ -28,49 +38,66 @@ public class MainActivity extends AppCompatActivity {
     NowPlayingViewModel nowPlayingViewModel;
 
     ProgressDialog progressDialog;
+    private List<NowPlayingItem> nowPlayingItems;
+    private NowPlayingAdapter mAdapter;
+    private RecyclerView recyclerView;
+    private PaginationScrollListener paginationScrollListener;
+    private GridLayoutManager gridLayoutManager;
+    private int mPage = 1;
+    private FrameLayout flProgressLoadMore;
+
+    private boolean isLoading = true;
+    private int mTotalPage = -1;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
         setContentView(R.layout.activity_main);
+        initRecyclerView();
 
         ((CoreApplication) getApplication()).getAppComponent().doInjection(this);
 
         progressDialog = Utils.getProgressDialog(this, "Data is Loading... ");
         nowPlayingViewModel = ViewModelProviders.of(this, nowPlayingViewModelFactory).get(NowPlayingViewModel.class);
+        nowPlayingViewModel.getNowPlayingResponse().observe(this, this::onHandleDataResponse);
 
-        nowPlayingViewModel.getNowPlayingResponse().observe(this, this::consumeResponse);
-
-        onLoginClicked();
+        onLoadData(mPage);
     }
 
-    void onLoginClicked() {
+    private void onLoadData(int page) {
         if (!Utils.checkInternetConnection(this)) {
             Toast.makeText(MainActivity.this, getResources().getString(R.string.network_error), Toast.LENGTH_SHORT).show();
         } else {
-            nowPlayingViewModel.getNowPlayingApi("SKLSDLSDLSDHSH", 1);
+            nowPlayingViewModel.getNowPlayingApi(page);
         }
 
     }
 
-    /*
-     * method to handle response
-     * */
-    private void consumeResponse(ApiResponse apiResponse) {
+    private void onHandleDataResponse(ApiResponse apiResponse) {
 
         switch (apiResponse.status) {
-
             case LOADING:
-                progressDialog.show();
+                if (mPage == 1) {
+                    progressDialog.show();
+                } else
+                    onShowProgressLoadMore(true);
+
                 break;
 
             case SUCCESS:
-                progressDialog.dismiss();
-                renderSuccessResponse(apiResponse.data);
+                if (progressDialog.isShowing())
+                    progressDialog.dismiss();
+
+                onShowProgressLoadMore(false);
+                onUpdateUINowPlayingList((NowPlayingResponses) apiResponse.data);
                 break;
 
             case ERROR:
-                progressDialog.dismiss();
+                if (progressDialog.isShowing())
+                    progressDialog.dismiss();
+                onShowProgressLoadMore(false);
                 Toast.makeText(MainActivity.this, getResources().getString(R.string.errorString), Toast.LENGTH_SHORT).show();
                 break;
 
@@ -79,14 +106,57 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /*
-     * method to handle success response
-     * */
-    private void renderSuccessResponse(JsonElement response) {
-        if (!response.isJsonNull()) {
+
+    private void onUpdateUINowPlayingList(NowPlayingResponses response) {
+        if (response != null) {
             Log.d("response=", response.toString());
+            mTotalPage = response.total_pages;
+            nowPlayingItems.addAll(response.nowPlayingItems);
+            mAdapter.notifyItemRangeInserted(nowPlayingItems.size(), response.nowPlayingItems.size());
         } else {
             Toast.makeText(MainActivity.this, getResources().getString(R.string.errorString), Toast.LENGTH_SHORT).show();
         }
+    }
+
+
+    private void initRecyclerView() {
+        nowPlayingItems = new ArrayList<>();
+        recyclerView = findViewById(R.id.recycler_view);
+        flProgressLoadMore = findViewById(R.id.flProgressLoadMore);
+        gridLayoutManager = new GridLayoutManager(this, 2);
+        recyclerView.setLayoutManager(gridLayoutManager);
+        paginationScrollListener = new PaginationScrollListener(gridLayoutManager) {
+            @Override
+            protected void loadMoreItems() {
+                ++mPage;
+                onLoadData(mPage);
+            }
+
+            @Override
+            public boolean isLastPage() {
+                return mPage == mTotalPage;
+            }
+
+            @Override
+            public boolean isLoading() {
+                return isLoading;
+            }
+        };
+        recyclerView.addOnScrollListener(paginationScrollListener);
+        recyclerView.addItemDecoration(new GridSpacingItemDecoration(2, Utils.dpToPx(4, getApplicationContext()), true));
+        recyclerView.setItemAnimator(new DefaultItemAnimator());
+        recyclerView.setNestedScrollingEnabled(false);
+        mAdapter = new NowPlayingAdapter(nowPlayingItems, this);
+        recyclerView.setAdapter(mAdapter);
+    }
+
+    private void onShowProgressLoadMore(boolean isShow) {
+        isLoading = isShow;
+        flProgressLoadMore.setVisibility(isShow ? View.VISIBLE : View.GONE);
+    }
+
+    @Override
+    public void onPostClicked(NowPlayingItem nowPlayingItem) {
+
     }
 }
