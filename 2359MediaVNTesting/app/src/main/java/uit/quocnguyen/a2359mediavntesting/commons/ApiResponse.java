@@ -16,7 +16,7 @@ public class ApiResponse {
     @Nullable
     public final Throwable error;
 
-    private ApiResponse(Status status, @Nullable Object data, @Nullable Throwable error) {
+    public ApiResponse(Status status, @Nullable Object data, @Nullable Throwable error) {
         this.status = status;
         this.data = data;
         this.error = error;
